@@ -1,13 +1,12 @@
 #include <iostream>
-#include <iomanip>
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 using namespace std;
 
 // konstanta ygy
-const int titlemax = 100;
-const int maxnote = 500;
+const int titlemax = 200;
+const int maxnote = 2000;
 const char notes_file[] = "notes.txt";
 
 // struct node linked list ygy
@@ -52,10 +51,10 @@ void savenotesfile()
 void loadnotesfile()
 {
     tunjuk = fopen(notes_file, "r");
-    // error handling ygy
+    // error handling ygy - jika file tidak ada, itu normal (belum ada data)
     if (!tunjuk)
     {
-        cout << "Gagal memuat file!" << endl;
+        // File belum ada, ini normal untuk pertama kali
         return;
     }
 
@@ -70,7 +69,22 @@ void loadnotesfile()
         {
             hasilangka = (hasilangka * 10) + (buffer[i] - '0');
         }
-        notehitung = hasilangka;
+        // ini untuk memvalidasi jika hasilangka 0 dan file tidak kosong, file mungkin corrupt
+        if (hasilangka == 0)
+        {
+            notehitung = 0;
+        }
+        else
+        {
+            notehitung = hasilangka;
+        }
+    }
+    else
+    {
+        // Error handling
+        notehitung = 0;
+        fclose(tunjuk);
+        return;
     }
 
     int id;
@@ -79,16 +93,30 @@ void loadnotesfile()
     // looping untuk membaca sisa note ygy
     while (fgets(buffer, sizeof(buffer), tunjuk))
     {
+        // ini untuk memvalidasi cek apakah buffer bisa dikonversi ke integer
         int hasilid = 0;
+        int validid = 0;
         for (int i = 0; buffer[i] >= '0' && buffer[i] <= '9'; i++)
         {
             hasilid = (hasilid * 10) + (buffer[i] - '0');
+            validid = 1;
         }
+
+        // error handling
+        if (!validid)
+        {
+            cout << "Data corrupt ditemukan! Skip data yang tidak valid." << endl;
+            continue;
+        }
+
         id = hasilid;
 
         // baris untuk judul ygy
         if (!fgets(judul, sizeof(judul), tunjuk))
+        {
+            cout << "File tidak lengkap, proses load selesai." << endl;
             break;
+        }
         // cari enter (\n) di judul diganti menjadi \0 atau null ygy
         for (int i = 0; judul[i] != '\0'; i++)
         {
@@ -101,7 +129,10 @@ void loadnotesfile()
 
         // baris untuk isi note ygy
         if (!fgets(isi, sizeof(isi), tunjuk))
+        {
+            cout << "File tidak lengkap, proses load selesai." << endl;
             break;
+        }
         // cari enter (\n) di isi diganti menjadi \0 atau null ygy
         for (int i = 0; isi[i] != '\0'; i++)
         {
@@ -157,10 +188,54 @@ void freememolist()
     head = NULL;
 }
 
-// menambahkan note ke list
-// ===================================================================tugas joyce
+// menambahkan note ke list ygy
 void tambahnotekelist(const char *judul, const char *isi)
 {
+    // Ini buat alokasi memori untuk node baru ygy
+    Note *nodebaru = (Note *)malloc(sizeof(Note));
+
+    // Error Handling ygy
+    if (nodebaru == NULL)
+    {
+        cout << "[Fatal Error] Gagal mengalokasikan memori! Catatan batal disimpan." << endl;
+        return;
+    }
+
+    // Isi data ke dalam node baru ygy
+    nodebaru->id = ++notehitung;
+
+    // ini buat menyalin string ke struct ygy
+    int i;
+    for (i = 0; i < titlemax - 1 && judul[i] != '\0'; i++)
+    {
+        nodebaru->judul[i] = judul[i];
+    }
+    nodebaru->judul[i] = '\0';
+
+    for (i = 0; i < maxnote - 1 && isi[i] != '\0'; i++)
+    {
+        nodebaru->isi[i] = isi[i];
+    }
+    nodebaru->isi[i] = '\0';
+
+    // Karena ini node baru, next-nya ke NULL dulu geyzt
+    nodebaru->next = NULL;
+
+    // Masukkan node ke dalam Linked List ygy
+    if (head == NULL)
+    {
+        head = nodebaru;
+    }
+    else
+    {
+        Note *temp = head;
+        while (temp->next != NULL)
+        {
+            temp = temp->next;
+        }
+        temp->next = nodebaru;
+    }
+    savenotesfile();
 }
 
 // rekursif untuk menghapus note berdasarkan id note ygy
@@ -218,9 +293,9 @@ void bubblesort()
     }
 
     // bubble sort ni geyzt
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n - 1; i++)
     {
-        for (int j = 0; j < n - 1; j++)
+        for (int j = 0; j < n - 1 - i; j++)
         {
             int cmp = 0;
             for (int k = 0;; k++)
@@ -261,53 +336,242 @@ void bubblesort()
     savenotesfile();
 }
 
-// rekursif untuk searching ygy
-// ===================================================================tugas joyce
-Note *searchingtittle(const char *keywordnotes)
+// rekurisif untuk searching ygy
+Note *searchingtittle(Note *current, const char *keywordnotes)
 {
+    // error handling ygy
+    if (current == NULL)
+    {
+        return NULL;
+    }
+
+    // konversi keyword ke lowercase untuk case insensitive search ygy
+    char keywordlower[titlemax];
+    for (int i = 0; i < titlemax && keywordnotes[i] != '\0'; i++)
+    {
+        if (keywordnotes[i] >= 'A' && keywordnotes[i] <= 'Z')
+            keywordlower[i] = keywordnotes[i] + 32;
+        else
+            keywordlower[i] = keywordnotes[i];
+    }
+    keywordlower[titlemax - 1] = '\0';
+
+    while (current != NULL)
+    {
+        // konversi judul ke lowercase ygy
+        char judullower[titlemax];
+        for (int i = 0; i < titlemax && current->judul[i] != '\0'; i++)
+        {
+            if (current->judul[i] >= 'A' && current->judul[i] <= 'Z')
+                judullower[i] = current->judul[i] + 32;
+            else
+                judullower[i] = current->judul[i];
+        }
+        judullower[titlemax - 1] = '\0';
+
+        int found = 0;
+        for (int i = 0; judullower[i] != '\0'; i++)
+        {
+            int j = 0;
+            while (keywordlower[j] != '\0' && judullower[i + j] == keywordlower[j])
+            {
+                j++;
+            }
+            if (keywordlower[j] == '\0')
+            {
+                found = 1;
+                break;
+            }
+        }
+
+        if (found)
+        {
+            return current; // Ketemu geyzt!
+        }
+
+        current = current->next;
+    }
+
+    return NULL;
 }
 
-// yes or no
 bool yesorno(string yort)
 {
-    cout << "Kembali ke menu utama? (Y/T) : ";
-    cin >> yort;
+    bool validinput = false;
+    cin.ignore(1000, '\n'); // Bersihkan buffer input dari system("pause") ygy
 
-    if (yort == "ya" || yort == "Ya" || yort == "YA" || yort == "yA" || yort == "y" || yort == "Y")
+    while (!validinput)
     {
-        system("cls");
-        return false;
+        cout << "Kembali ke menu utama? (Y/T) : ";
+        cin >> yort;
+
+        // Validasi input tidak kosong ygy
+        int panjangInput = 0;
+        for (int i = 0; yort[i] != '\0'; i++)
+        {
+            panjangInput++;
+        }
+
+        if (panjangInput == 0)
+        {
+            cout << "Input tidak boleh kosong! Silahkan coba lagi." << endl;
+            continue;
+        }
+
+        if (yort == "ya" || yort == "Ya" || yort == "YA" || yort == "yA" || yort == "y" || yort == "Y")
+        {
+            system("cls");
+            return false;
+        }
+        else if (yort == "tidak" || yort == "Tidak" || yort == "TIDAK" || yort == "t" || yort == "T")
+        {
+            cout << "Program Selesai!" << endl;
+            cout << "Terima kasih telah menggunakan program ini!" << endl;
+            return true;
+        }
+        else
+        {
+            cout << "Opsi tidak tersedia! Input hanya (ya/tidak atau y/t). Silahkan coba lagi." << endl;
+            continue;
+        }
     }
-    else if (yort == "tidak" || yort == "Tidak" || yort == "TIDAK" || yort == "t" || yort == "T")
-    {
-        cout << "Program Selesai!" << endl;
-        cout << "Terima kasih telah menggunakan program ini!" << endl;
-        return true;
-    }
-    else
-    {
-        cout << "Opsi tidak tersedia. Silahkan input kembali" << endl;
-        return yesorno("");
-    }
+
+    return false;
 }
 
 // ==menu utama ygy==
 
-// ===================================================================tugas joyce
+// menu tambah note ygy
 void tambahnote()
 {
+    system("cls");
+    char judul[titlemax], isi[maxnote];
+
+    cout << "==============================" << endl;
+    cout << "      TAMBAH CATATAN BARU     " << endl;
+    cout << "==============================" << endl;
+
+    // Error handling ygy
+    cin.ignore(1000, '\n');
+
+    cout << "PERINGATAN! \nJudul catatan hanya bisa diisi sebanyak 200 kata dan isi catatan hanya bisa diisi sebanyak 2000 kata. Jika melebihi batas, maka file catatan akan corupt dan tidak akan tersimpan." << endl;
+    cout << endl;
+
+    system("pause");
+
+    // Loop untuk validasi judul tidak kosong ygy
+    int panjangJudul = 0;
+    bool validjudul = false;
+    while (!validjudul)
+    {
+        cout << "Masukkan Judul Catatan: ";
+        cin.getline(judul, titlemax);
+
+        // Hitung panjang judul ygy
+        panjangJudul = 0;
+        for (int i = 0; judul[i] != '\0'; i++)
+        {
+            panjangJudul++;
+        }
+
+        if (panjangJudul == 0)
+        {
+            cout << "Gagal! Judul catatan tidak boleh kosong! Silahkan coba lagi." << endl;
+            continue;
+        }
+        validjudul = true;
+    }
+
+    cout << "Masukkan Isi Catatan  : ";
+    cin.getline(isi, maxnote);
+
+    tambahnotekelist(judul, isi);
+
+    cout << "\nCatatan berhasil disimpan ke memory dan file!" << endl;
+    system("pause");
 }
 
-// ===================================================================tugas joyce
+// menu lihat note ygy
 void lihatnote()
 {
+    system("cls");
+    cout << "==============================" << endl;
+    cout << "     DAFTAR SELURUH NOTES     " << endl;
+    cout << "==============================" << endl;
+
+    // Error handling ygy
+    if (head == NULL)
+    {
+        cout << "\nCatatan masih kosong geyzt, yuk tambah dulu!" << endl;
+        system("pause");
+        return;
+    }
+
+    Note *current = head;
+    int index = 1;
+    while (current != NULL)
+    {
+        cout << index++ << ". [" << current->id << "] " << current->judul << endl;
+        cout << "   Isi: " << current->isi << endl;
+        cout << "------------------------------" << endl;
+        current = current->next;
+    }
+    system("pause");
 }
 
-// ===================================================================tugas joyce
+// menu cari note ygy
 void carinote()
 {
+    system("cls");
+    char keyword[titlemax];
+    int panjangKeyword = 0;
+
+    // Error handling
+    if (head == NULL)
+    {
+        cout << "Gak ada catatan yang bisa dicari geyzt!" << endl;
+        system("pause");
+        return;
+    }
+
+    cout << "==============================" << endl;
+    cout << "         CARI CATATAN         " << endl;
+    cout << "==============================" << endl;
+
+    cin.ignore(1000, '\n');
+    cout << "Masukkan kata kunci judul: ";
+    cin.getline(keyword, titlemax);
+
+    // Validasi keyword tidak kosong
+    for (int i = 0; keyword[i] != '\0'; i++)
+    {
+        panjangKeyword++;
+    }
+
+    if (panjangKeyword == 0)
+    {
+        cout << "\nError: Kata kunci tidak boleh kosong!" << endl;
+        system("pause");
+        return;
+    }
+
+    Note *hasil = searchingtittle(head, keyword);
+
+    if (hasil != NULL)
+    {
+        cout << "\nData Berhasil Ditemukan!" << endl;
+        cout << "ID   : " << hasil->id << endl;
+        cout << "Judul: " << hasil->judul << endl;
+        cout << "Isi  : " << hasil->isi << endl;
+    }
+    else
+    {
+        cout << "\nJudul mengandung '" << keyword << "' tidak ditemukan!" << endl;
+    }
+    system("pause");
 }
 
+// menu mengurutkan note ygy
 void urutkannote()
 {
     system("cls");
@@ -318,7 +582,8 @@ void urutkannote()
     int n = menghitungnote();
     if (n < 2)
     {
-        cout << "\n Perlu minimal 2 notesmu untuk diurutkan!" << endl;
+        cout << "\nPerlu minimal 2 notes untuk diurutkan!" << endl;
+        system("pause");
         return;
     }
 
@@ -334,8 +599,10 @@ void urutkannote()
         cout << " " << no++ << ". " << current->judul << endl;
         current = current->next;
     }
+    system("pause");
 }
 
+// menu hapus note ygy
 void hapusnote()
 {
     system("cls");
@@ -345,7 +612,8 @@ void hapusnote()
 
     if (!head)
     {
-        cout << "Belum ada note untuk dihapus bang" << endl;
+        cout << "Belum ada note untuk dihapus bang!" << endl;
+        system("pause");
         return;
     }
 
@@ -358,23 +626,31 @@ void hapusnote()
     }
 
     int id;
+    bool found = false;
     cout << endl;
-    cout << "Masukkan ID note yang ingin kamu hapus : ";
-    while (!(cin >> id))
-    {
-        cout << "Input harus angka! Masukkan ID kembali: ";
-        cin.clear();
-        cin.ignore(1000, '\n');
-    }
 
-    if (deletenoteid(id))
+    while (!found)
     {
-        cout << "Catatan ID: " << id << " Berhasil Dihapus!" << endl;
+        cout << "Masukkan ID note yang ingin kamu hapus : ";
+        // error handling
+        while (!(cin >> id))
+        {
+            cout << "Input harus angka! Masukkan ID kembali: ";
+            cin.clear();
+            cin.ignore(1000, '\n');
+        }
+
+        if (deletenoteid(id))
+        {
+            cout << "Catatan ID: " << id << " Berhasil Dihapus!" << endl;
+            found = true;
+        }
+        else
+        {
+            cout << "ID: " << id << " Tidak ditemukan! Coba lagi." << endl;
+        }
     }
-    else
-    {
-        cout << "ID: " << id << " Tidak ditemukan! Coba lagi." << endl;
-    }
+    system("pause");
 }
 
 int main()
@@ -388,9 +664,13 @@ int main()
     int max_attempt = 5;
     bool kembalikemenuawal = true;
     int i = 1;
+    bool validmenu = false;
+
+    loadnotesfile();
 
     while (kembalikemenuawal)
     {
+        validmenu = false;
         cout << "=====================" << endl;
         cout << " WELCOME TO NOTE APP " << endl;
         cout << "=====================" << endl;
@@ -407,9 +687,10 @@ int main()
             i = 1;
             do
             {
+                validmenu = false;
                 system("cls");
                 cout << "=====================" << endl;
-                cout << "HALO, " << inputusername << endl;
+                cout << "  HALO, " << inputusername << endl;
                 cout << "=====================" << endl;
                 cout << "1. Tambah Catatan Baru" << endl;
                 cout << "2. Lihat Semua Catatan" << endl;
@@ -418,6 +699,8 @@ int main()
                 cout << "5. Hapus Catatan" << endl;
                 cout << "6. Logout" << endl;
                 cout << "Masukkan menu: ";
+
+                // Error handling untuk input harus angka
                 while (!(cin >> pilihan))
                 {
                     cout << "Input harus angka! Masukkan menu kembali: ";
@@ -425,14 +708,33 @@ int main()
                     cin.ignore(1000, '\n');
                 }
 
-                while (pilihan < 1 || pilihan > 6)
+                // Error handling untuk pilihan harus 1-6
+                while (!validmenu)
                 {
-                    cout << "Opsi tidak tersedia! Masukkan menu (1-6): ";
-                    while (!(cin >> pilihan))
+                    if (pilihan >= 1 && pilihan <= 6)
                     {
-                        cout << "Input harus angka! Masukkan menu kembali: ";
-                        cin.clear();
-                        cin.ignore(1000, '\n');
+                        validmenu = true;
+                    }
+                    else
+                    {
+                        system("cls");
+                        cout << "Opsi tidak tersedia! Silahkan input kembali." << endl;
+                        cout << "=====================" << endl;
+                        cout << "  HALO, " << inputusername << endl;
+                        cout << "=====================" << endl;
+                        cout << "1. Tambah Catatan Baru" << endl;
+                        cout << "2. Lihat Semua Catatan" << endl;
+                        cout << "3. Cari Catatan" << endl;
+                        cout << "4. Urutkan Catatan" << endl;
+                        cout << "5. Hapus Catatan" << endl;
+                        cout << "6. Logout" << endl;
+                        cout << "Masukkan menu: ";
+                        while (!(cin >> pilihan))
+                        {
+                            cout << "Input harus angka! Masukkan menu kembali: ";
+                            cin.clear();
+                            cin.ignore(1000, '\n');
+                        }
                     }
                 }
 
@@ -473,6 +775,7 @@ int main()
                     break;
                 }
             } while (pilihan != 6);
+            freememolist();
             cout << "Terima kasih, " << inputusername << "\nSampai jumpa di lembaran berikutnya!\n";
             system("pause");
             system("cls");
@@ -498,6 +801,7 @@ int main()
     {
         system("cls");
         cout << "Login gagal! Akses ditolak." << endl;
+        freememolist();
         return 0;
     }
 }
